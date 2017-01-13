@@ -24,7 +24,6 @@ defmodule InstaCrawler.API.Private.Mixfile do
 
   def application do
     [
-      mod: {InstaCrawler.PrivateAPI.Application, []},
       applications: app_list
     ]
   end
