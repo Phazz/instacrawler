@@ -5,12 +5,10 @@ defmodule InstaCrawler.Crawler.Application do
     import Supervisor.Spec
 
     children = [
-      #Plug.Adapters.Cowboy.child_spec(:http, InstaCrawler.Router, [], [port: Application.fetch_env!(:crawler, :cowboy_port)]),
       supervisor(InstaCrawler.DistributedTask, []),
-      supervisor(InstaCrawler.Gateway.Supervisor, []),
-      supervisor(InstaCrawler.Client.Supervisor, []),
+      worker(InstaCrawler.Gateway, [], restart: :permanent),
       supervisor(InstaCrawler.Crawler.Supervisor, []),
-      supervisor(InstaCrawler.Linker.Supervisor,[])
+      supervisor(InstaCrawler.Parser.Supervisor, [])
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)

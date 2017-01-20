@@ -1,8 +1,8 @@
-defmodule InstaCrawler.API.Private.Mixfile do
+defmodule Storage.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :private_api,
+    [app: :storage,
      version: "0.1.0",
      build_path: "../../_build",
      config_path: "../../config/config.exs",
@@ -16,20 +16,16 @@ defmodule InstaCrawler.API.Private.Mixfile do
 
   defp deps do
     [
-      {:httpoison, "~> 0.10.0"},
-      {:poison, "~> 3.0"},
-      {:exprintf, "~> 0.2.0"}
-   ]
+      {:mongodb, github: "ericmj/mongodb"},
+      {:gen_stage, "~> 0.11.0"}
+    ]
   end
 
   def application do
     [
-      applications: app_list()
+      mod: {InstaCrawler.Storage.Application, []},
+      applications: [:gen_stage, :mongodb]
     ]
-  end
-
-  defp app_list do
-    [:httpoison]
   end
 
 end

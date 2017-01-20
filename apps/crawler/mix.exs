@@ -11,24 +11,24 @@ defmodule InstaCrawler.Crawler.Mixfile do
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     deps: deps]
+     deps: deps()]
   end
 
   defp deps do
     [
-      {:libcluster, "~> 2.0"},
-      {:swarm, "~> 3.0"},
-      {:cowboy, "~> 1.0.0"},
-      {:plug, "~> 1.0"},
-      { :uuid, "~> 1.1" },
-      {:private_api, in_umbrella: true}
+      {:private_api, in_umbrella: true},
+      {:libcluster, github: "bitwalker/libcluster"},
+      {:swarm, github: "bitwalker/swarm"},
+      {:uuid, "~> 1.1" },
+      {:gen_stage, "~> 0.11"},
+      {:flow, "~> 0.11"}
     ]
   end
 
   def application do
     [
       mod: {InstaCrawler.Crawler.Application, []},
-      applications: [:libcluster, :private_api, :swarm, :plug, :cowboy]
+      applications: [:libcluster, :swarm, :gen_stage]
     ]
   end
 

@@ -1,118 +1,75 @@
 defmodule InstaCrawler.Crawler do
-  use GenServer
-  alias InstaCrawler.{Client, Extractor, DistributedTask}
+  require Logger
+  use GenStage
+  alias InstaCrawler.{Gateway, PrivateAPI.Request}
 
-  @possible_ids [:pk, :id, :media_id, :profile_pic_id, :user_id, :username, :next_max_id, :max_id]
-
-  def refresh_session(crawler, session) do
-    GenServer.call(crawler, {:refresh, session})
+  def start_link(session, opts) do
+    GenStage.start_link(__MODULE__, [session, opts])
   end
 
-  def flush(crawler) do
-    GenServer.call(crawler, :flush)
+  def init([session, opts]) do
+    crawls = Keyword.get(opts, :crawls, 1000)
+    GenStage.cast(self(), :refresh)
+    {:producer_consumer, %{session: session, counter: crawls},
+    dispatcher: GenStage.BroadcastDispatcher}
   end
 
-  def crawl(crawler, entrypoint) do
-    GenServer.cast(crawler, {nil, entrypoint})
-  end
+  def handle_events(events, _from, %{session: session, counter: counter} = state) do
+    new_events = events
+    |> Flow.from_enumerable
+    |> Flow.flat_map(fn rel ->
+      {_, req} = rel
 
-  def start_link(session, callback) do
-    GenServer.start_link(__MODULE__, {session, callback})
-  end
-
-  def init({session, callback}) do
-    {:ok, client} = Client.Supervisor.new(session)
-    {:ok, {client, MapSet.new, callback}}
-  end
-
-  def handle_call({:refresh, session}, _from, {client, cache, callback} = state) do
-    {:reply, Client.refresh_session(client, session), state}
-  end
-  def handle_call(:flush, _from, {client, cache, callback}) do
-    {:reply, cache, {client, MapSet.new, callback}}
-  end
-
-  def handle_cast({parent_req, req} = rel, {client, cache, callback}) when is_tuple(req) do
-    new_cache =  MapSet.put(cache, req)
-
-    unless MapSet.member?(cache, req) do
-      resp = Client.request(client, req)
+      resp = Gateway.request(req, session)
 
       case resp do
-        {:ok, result} ->
-          callback.({:rel, rel})
-          callback.({:value, {req, result}})
-          DistributedTask.async_nolink(fn ->
-            {req, Extractor.extract(result, @possible_ids)}
-          end)
+        {:ok, content} ->
+          [{:relation, rel}, {:content, {req, content}}]
         {:err, error} ->
-          callback.({:err, error})
+          [{:error, {req, error}}]
+        :noop -> []
       end
+    end)
+    |> Enum.reverse
+
+    counter = counter - 1
+
+    if counter == 0 do
+      GenStage.async_notify(self(), :poison)
+      {:stop, :normal, %{}}
     else
-      callback.({:rel, rel})
-    end
-    {:noreply, {client, new_cache, callback}}
-  end
-
-  def handle_info({_, {req, tokens}}, {_client, cache, _callback} = state) when is_list(tokens) do
-    tokens
-    |> Stream.flat_map(&to_requests(req, &1))
-    |> Stream.dedup
-    |> Stream.each(&GenServer.cast(self, {req, &1}))
-    |> Stream.run
-    {:noreply, state}
-  end
-  def handle_info({:DOWN, _, :process, _, _}, state) do
-    {:noreply, state}
-  end
-
-  defp to_requests(req, {key, id}) do
-    cond do
-      key in [:pk, :user_id] ->
-        [
-          {:user_id, id, :followers},
-          {:user_id, id, :following},
-          {:user_id, id, :media_tags},
-          {:user_id, id, :media}
-        ]
-      key in [:profile_pic_id, :id, :media_id] ->
-        [
-          {:media, id, :info},
-          {:media, id, :comments},
-          {:media, id, :likers}
-        ]
-      key in [:username] ->
-        [
-          {:username, id, :info}
-        ]
-      key in [:next_max_id, :max_id] ->
-        [
-          if tuple_size(req) > 3 do
-            put_elem(req, 3, [max_id: id])
-          else
-            Tuple.append(req, [max_id: id])
-          end
-        ]
+      {:noreply, new_events, %{state | counter: counter - 1}}
     end
   end
-  defp to_requests(req, []), do: []
+
+  def handle_cast(:refresh, %{session: session} = state) do
+    {:ok, new_session} = Gateway.request(%Request{resource: :login}, session)
+    {:noreply, [], %{state | session: new_session}}
+  end
 
 end
 
 defmodule InstaCrawler.Crawler.Supervisor do
   use Supervisor
+  alias InstaCrawler.Cluster
 
   def start_link do
     Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  def new(session, callback) do
-    Supervisor.start_child(__MODULE__, [session, callback])
+  def start_child(session, opts \\ []) do
+    Supervisor.start_child(__MODULE__, [session, opts])
+  end
+
+  def new(session, opts \\ []) do
+    Cluster.start(__MODULE__, :start_child, [session, opts])
   end
 
   def init(:ok) do
+    import Supervisor.Spec
+
     children = [
-      worker(InstaCrawler.Crawler, [], restart: :transient)
+      worker(InstaCrawler.Crawler, [], restart: :temporary)
     ]
 
     supervise(children, strategy: :simple_one_for_one)

@@ -1,6 +1,6 @@
 defmodule InstaCrawler.Cluster do
 
-  def start_link(mod, fun, args \\ []) do
+  def start(mod, fun, args \\ []) do
     Swarm.register_name(UUID.uuid1(), mod, fun, args)
   end
 

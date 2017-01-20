@@ -5,7 +5,7 @@ defmodule Instacrawler.Mixfile do
     [apps_path: "apps",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     deps: deps]
+     deps: deps()]
   end
 
   defp deps do
@@ -22,10 +22,10 @@ defmodule Instacrawler.Mixfile do
     ]
   end
 
-  defp app_list(:dev), do: [:dotenv | app_list]
-  defp app_list(_), do: app_list
+  defp app_list(:dev), do: [:dotenv | app_list()]
+  defp app_list(_), do: app_list()
 
   defp app_list do
-    [:logger, :crawler]
+    [:logger]
   end
 end

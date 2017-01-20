@@ -1,11 +1,11 @@
 defmodule InstaCrawler.PrivateAPI do
-  alias InstaCrawler.PrivateAPI.{Crypto, Session}
+  alias InstaCrawler.PrivateAPI.{Crypto, Session, Request}
 
   @base_url "https://i.instagram.com/api/v1"
 
   def request(req, session)
 
-  def request(:login, session) do
+  def request(%Request{resource: :login}, session) do
     url = @base_url <> "/accounts/login/"
 
     data = Poison.encode!(%{
@@ -23,11 +23,9 @@ defmodule InstaCrawler.PrivateAPI do
       {"Content-Type", "application/x-www-form-urlencoded"}
     ]
 
-    resp = if session.proxy_url == :none do
-      HTTPoison.post!(url, body, headers)
-    else
-      HTTPoison.post!(url, body, headers, proxy: session.proxy_url, proxy_auth: session.proxy_auth)
-    end
+    options = fetch_options(session)
+
+    resp = HTTPoison.post!(url, body, headers, options)
 
     case resp do
       %{status_code: 200} ->
@@ -35,65 +33,73 @@ defmodule InstaCrawler.PrivateAPI do
         |> Enum.filter(fn {name, _} -> name == "Set-Cookie" end)
         |> Enum.map(&(parse_cookie/1))
         |> List.insert_at(-1, {"igfl", session.username})
-        {:ok, cookies}
+        {:ok, %{session | cookies: cookies}}
       _ ->
         {:err, resp}
     end
   end
-  def request({entity, id, resource}, session) do
+  def request(%Request{entity: entity, id: id, resource: resource, params: []}, session) do
     get_request(get_uri_for({entity, id, resource}), session)
   end
-  def request({entity, id, resource, opts}, session) when is_list(opts) do
-    uri = "#{get_uri_for({entity, id, resource})}?"
-    query_params = opts
-    |> Enum.reduce("", fn {key, value}, acc -> acc <> "#{key}=value&" end)
+  def request(%Request{entity: entity, id: id, resource: resource, params: params}, session) do
+    uri = get_uri_for({entity, id, resource})
+    query = URI.encode_query(params)
 
-    get_request(uri <> query_params, session)
+    uri = if String.contains?(uri, "?") do
+      uri <> "&" <> query
+    else
+      uri <> "?" <> query
+    end
+
+    get_request(uri, session)
   end
 
-  def get_uri_for({:username, username, :info}) do
-    "/users/#{username}/usernameinfo"
+  defp get_uri_for({:username, username, :info}) do
+    "/users/" <> username <> "/usernameinfo"
   end
-  def get_uri_for({:user_id, user_id, :geo_media}) do
+  defp get_uri_for({:user, user_id, :geo_media}) do
     "/maps/user/#{user_id}"
   end
-  def get_uri_for({:user_id, user_id, :followers}) do
+  defp get_uri_for({:user, user_id, :followers}) do
     "/friendships/#{user_id}/followers"
   end
-  def get_uri_for({:user_id, user_id, :following}) do
+  defp get_uri_for({:user, user_id, :following}) do
     "/friendships/#{user_id}/following"
   end
-  def get_uri_for({:user_id, user_id, :media_tags}) do
+  defp get_uri_for({:user, user_id, :media_tags}) do
     "/usertags/#{user_id}/feed"
   end
-  def get_uri_for({:user_id, user_id, :media}) do
+  defp get_uri_for({:user, user_id, :media}) do
     "/feed/user/#{user_id}"
   end
-  def get_uri_for({:media, media_id, :info}) do
+  defp get_uri_for({:media, media_id, :info}) do
     "/media/#{media_id}/info"
   end
-  def get_uri_for({:media, media_id, :comments}) do
+  defp get_uri_for({:media, media_id, :comments}) do
     "/media/#{media_id}/comments"
   end
-  def get_uri_for({:media, media_id, :likers}) do
+  defp get_uri_for({:media, media_id, :likers}) do
     "/media/#{media_id}/likers"
   end
-  def get_uri_for({:hashtag, hashtag, :feed}) do
+  defp get_uri_for({:hashtag, hashtag, :feed}) do
     "/feed/tag/#{hashtag}"
+  end
+  defp get_uri_for({:location, query, :search}) do
+    "/location_search?" <> URI.encode_query([search_query: query])
+  end
+  defp get_uri_for({:location, location_id, :feed}) do
+    "/feed/location/#{location_id}"
   end
 
   defp get_request(uri, session) do
     url = @base_url <> uri
 
-    options = [hackney: [cookie: session.cookies, follow_redirect: true]]
+    options = [
+      hackney: [cookie: session.cookies, follow_redirect: true],
+      ssl: [versions: [:"tlsv1.2"]] #workaround for broken ssl in 19.0
+    ]
 
-    options = case session.proxy_url  do
-      :none -> options
-      _ ->
-        options
-        |> Keyword.put(:proxy, session.proxy_url)
-        |> Keyword.put(:proxy_auth, session.proxy_auth)
-    end
+    options = Keyword.merge(options, fetch_options(session))
 
     headers = [
       {"User-Agent", session.identity.user_agent}
@@ -111,6 +117,17 @@ defmodule InstaCrawler.PrivateAPI do
 
   defp parse_cookie({_, content}) do
     List.first(:hackney_cookie.parse_cookie(content))
+  end
+
+  defp fetch_options(session) do
+    case session.proxy_url do
+      url when is_binary(url) ->
+        case session.proxy_auth do
+          {username, password} -> [proxy: url, proxy_auth: {username, password}]
+          _ -> [proxy: url]
+        end
+      _ -> []
+    end
   end
 
 end

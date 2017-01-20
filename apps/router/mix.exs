@@ -1,8 +1,8 @@
-defmodule InstaCrawler.API.Private.Mixfile do
+defmodule Router.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :private_api,
+    [app: :router,
      version: "0.1.0",
      build_path: "../../_build",
      config_path: "../../config/config.exs",
@@ -16,20 +16,17 @@ defmodule InstaCrawler.API.Private.Mixfile do
 
   defp deps do
     [
-      {:httpoison, "~> 0.10.0"},
-      {:poison, "~> 3.0"},
-      {:exprintf, "~> 0.2.0"}
-   ]
+      {:crawler, in_umbrella: true},
+      {:plug, "~> 1.0"},
+      {:cowboy, "~> 1.0.0"},
+      {:gen_stage, "~> 0.11.0"}
+    ]
   end
 
   def application do
     [
-      applications: app_list()
+      mod: {InstaCrawler.Router.Application, []},
+      applications: [:cowboy, :plug, :gen_stage]
     ]
   end
-
-  defp app_list do
-    [:httpoison]
-  end
-
 end

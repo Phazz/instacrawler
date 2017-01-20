@@ -14,7 +14,7 @@ defmodule InstaCrawler.DistributedTask do
   defp do_async(fun, link_type) do
     owner = self()
     args = [owner, :monitor, get_info(owner), {:erlang, :apply, [fun, []]}]
-    {:ok, pid} = Cluster.start_link(Supervisor, :start_child, [__MODULE__, args])
+    {:ok, pid} = Cluster.start(Supervisor, :start_child, [__MODULE__, args])
     if link_type == :link, do: Process.link(pid)
     ref = Process.monitor(pid)
     send pid, {owner, ref}
