@@ -7,11 +7,11 @@ defmodule InstaCrawler.Storage.Application do
     children = [
       worker(Mongo, [[
         name: :mongo,
-        hostname: Application.fetch_env!(:storage, :hostname),
-        port: Application.fetch_env!(:storage, :port),
-        username: Application.get_env(:storage, :username),
-        password: Application.get_env(:storage, :password),
-        database: Application.fetch_env!(:storage, :database)
+        hostname: Confex.get(:storage, :hostname),
+        port: Confex.get(:storage, :port),
+        username: Confex.get(:storage, :username),
+        password: Confex.get(:storage, :password),
+        database: Confex.get(:storage, :database)
       ]]),
       worker(InstaCrawler.Storage, [:mongo], restart: :permanent)
     ]

@@ -1,5 +1,4 @@
 defmodule InstaCrawler.Crawler do
-  require Logger
   use GenStage
   alias InstaCrawler.{Gateway, PrivateAPI.Request}
 
@@ -8,7 +7,7 @@ defmodule InstaCrawler.Crawler do
   end
 
   def init([session, opts]) do
-    crawls = Keyword.get(opts, :crawls, 1000)
+    crawls = Keyword.get(opts, :max_crawls, 1000)
     GenStage.cast(self(), :refresh)
     {:producer_consumer, %{session: session, counter: crawls},
     dispatcher: GenStage.BroadcastDispatcher}
@@ -16,8 +15,7 @@ defmodule InstaCrawler.Crawler do
 
   def handle_events(events, _from, %{session: session, counter: counter} = state) do
     new_events = events
-    |> Flow.from_enumerable
-    |> Flow.flat_map(fn rel ->
+    |> Enum.flat_map(fn rel ->
       {_, req} = rel
 
       resp = Gateway.request(req, session)
@@ -30,9 +28,6 @@ defmodule InstaCrawler.Crawler do
         :noop -> []
       end
     end)
-    |> Enum.reverse
-
-    counter = counter - 1
 
     if counter == 0 do
       GenStage.async_notify(self(), :poison)
@@ -42,9 +37,26 @@ defmodule InstaCrawler.Crawler do
     end
   end
 
+  def handle_call({:swarm, :begin_handoff}, _from, state) do
+   {:reply, {:resume, state}, [], state}
+  end
+
+  def handle_cast({:swarm, :end_handoff, state}, _state) do
+   {:noreply, [], state}
+  end
+  def handle_cast({:swarm, :resolve_conflict, _state}, state) do
+   {:noreply, [], state}
+  end
   def handle_cast(:refresh, %{session: session} = state) do
     {:ok, new_session} = Gateway.request(%Request{resource: :login}, session)
     {:noreply, [], %{state | session: new_session}}
+  end
+
+  def handle_info({:swarm, :die}, state) do
+   {:stop, :shutdown, state}
+  end
+  def handle_info(_, state) do
+    {:noreply, [], state}
   end
 
 end

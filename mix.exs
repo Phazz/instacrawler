@@ -12,7 +12,8 @@ defmodule Instacrawler.Mixfile do
     [
       {:credo, "~> 0.5", only: [:dev, :test]},
       {:distillery, "~> 1.0"},
-      {:dotenv, "~> 2.0.0"}
+      {:dotenv, "~> 2.0.0"},
+      {:confex, "~> 1.4.1"}
     ]
   end
 
@@ -26,6 +27,6 @@ defmodule Instacrawler.Mixfile do
   defp app_list(_), do: app_list()
 
   defp app_list do
-    [:logger]
+    [:logger, :confex]
   end
 end

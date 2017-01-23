@@ -24,12 +24,12 @@ defmodule InstaCrawler.API.Private.Mixfile do
 
   def application do
     [
-      applications: app_list()
+      applications: app_list(),
     ]
   end
 
   defp app_list do
-    [:httpoison]
+    [:httpoison, :exprintf]
   end
 
 end

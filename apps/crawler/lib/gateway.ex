@@ -15,18 +15,12 @@ defmodule InstaCrawler.Gateway do
   end
 
   def init(:ok) do
-    state = %{refs: %{}, cache: %{}}
+    state = %{refs: %{}, cache: MapSet.new}
     {:ok, state}
   end
 
-  def handle_call({req, session}, {pid, _} = from, %{refs: refs, cache: cache} = state) do
-    reqs = Map.get(cache, pid, MapSet.new)
-
-    if MapSet.size(reqs) == 0 do
-      Process.monitor(pid)
-    end
-
-    if MapSet.member?(reqs, req) do
+  def handle_call({req, session}, from, %{refs: refs, cache: cache} = state) do
+    if MapSet.member?(cache, req) do
       {:reply, :noop, state}
     else
       task = DistributedTask.async_nolink(fn ->
@@ -36,7 +30,7 @@ defmodule InstaCrawler.Gateway do
       Logger.info("[#{inspect self()}] request: #{inspect req}")
       Logger.debug("[#{inspect self()}] session: #{inspect session}")
 
-      updated_cache = Map.put(cache, pid, MapSet.put(reqs, req))
+      updated_cache = MapSet.put(cache, req)
 
       updated_refs = Map.put(refs, task.ref, from)
 
@@ -48,18 +42,12 @@ defmodule InstaCrawler.Gateway do
     GenServer.reply(from, response)
     {:noreply, state}
   end
-  def handle_info({:DOWN, ref, :process, pid, reason}, %{refs: refs, cache: cache} = state) do
-    cond do
-    Map.has_key?(refs, ref) ->
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{refs: refs} = state) do
       {from, updated_refs} = Map.pop(refs, ref)
       if reason != :normal do
-        GenServer.reply(from, {:err, %{}})
+        GenServer.reply(from, {:err, %{reason: inspect(reason)}})
       end
       {:noreply, %{state | refs: updated_refs}}
-    Map.has_key?(cache, pid) ->
-      updated_cache = Map.delete(cache, pid)
-      {:noreply, %{state | cache: updated_cache}}
-    end
   end
 
 

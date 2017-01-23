@@ -28,7 +28,7 @@ defmodule InstaCrawler.Crawler.Mixfile do
   def application do
     [
       mod: {InstaCrawler.Crawler.Application, []},
-      applications: [:libcluster, :swarm, :gen_stage]
+      applications: [:libcluster, :swarm, :gen_stage, :flow, :uuid]
     ]
   end
 
