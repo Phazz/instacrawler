@@ -5,7 +5,7 @@ defmodule InstaCrawler.Parser do
   @user_id_length 10
 
   @possible_keys [:user_id, :pk, :id, :username, :media_id, :external_id,
-                 :next_max_id, :max_id, :facebook_places_id, :location, :profile_pic_id]
+                  :facebook_places_id, :location, :profile_pic_id]
 
   def start_link(opts \\ []) do
     GenStage.start_link(__MODULE__, opts)
@@ -75,8 +75,8 @@ defmodule InstaCrawler.Parser do
   defp to_requests(_req, {:user_id, value}, params) do
     [
       %Request{entity: :user, id: value, resource: :media, params: params},
-      %Request{entity: :user, id: value, resource: :followers},
-      %Request{entity: :user, id: value, resource: :following},
+#      %Request{entity: :user, id: value, resource: :followers},
+#      %Request{entity: :user, id: value, resource: :following},
 #      %Request{entity: :user, id: value, resource: :media_tags}
     ]
   end
@@ -98,11 +98,6 @@ defmodule InstaCrawler.Parser do
   defp to_requests(_req, {:username, value}, _params) do
       [
         %Request{entity: :username, id: value, resource: :info}
-      ]
-  end
-  defp to_requests(req, {:next_max_id, value}, params) do
-      [
-        %{req | params: Map.put(params, :max_id, value)}
       ]
   end
   defp to_requests(_req, [], _params), do: []

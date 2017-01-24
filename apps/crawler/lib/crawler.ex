@@ -1,6 +1,8 @@
 defmodule InstaCrawler.Crawler do
   use GenStage
-  alias InstaCrawler.{Gateway, PrivateAPI.Request}
+  alias InstaCrawler.{Gateway, PrivateAPI.Request, Extractor}
+
+  @max_id_keys [:next_max_id, :max_id]
 
   def start_link(session, opts) do
     GenStage.start_link(__MODULE__, [session, opts])
@@ -13,6 +15,23 @@ defmodule InstaCrawler.Crawler do
     dispatcher: GenStage.BroadcastDispatcher}
   end
 
+  def loop_pages(req, session, content) do
+    available = Map.get(content, :more_available, true)
+
+    if available do
+      max_id = Map.get(content, :next_max_id, "")
+      next_req = %{req | params: Map.put(req.params, :max_id, max_id)}
+      resp = Gateway.request(next_req, session)
+
+      case resp do
+        {:ok, content} -> [{:content, {req, content}} | loop_pages(req, session, content)]
+        _ -> []
+      end
+    else
+      []
+    end
+  end
+
   def handle_events(events, _from, %{session: session, counter: counter} = state) do
     new_events = events
     |> Enum.flat_map(fn rel ->
@@ -22,7 +41,9 @@ defmodule InstaCrawler.Crawler do
 
       case resp do
         {:ok, content} ->
-          [{:relation, rel}, {:content, {req, content}}]
+          pages = loop_pages(req, session,  content)
+
+          [{:relation, rel}, {:content, {req, content}}] ++ pages
         {:err, error} ->
           [{:error, {req, error}}]
         :noop -> []
@@ -30,7 +51,7 @@ defmodule InstaCrawler.Crawler do
     end)
 
     if counter == 0 do
-      GenStage.async_notify(self(), :poison)
+      GenStage.sync_notify(self(), :poison)
       {:stop, :normal, %{}}
     else
       {:noreply, new_events, %{state | counter: counter - 1}}
