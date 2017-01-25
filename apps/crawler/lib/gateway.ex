@@ -19,23 +19,17 @@ defmodule InstaCrawler.Gateway do
     {:ok, state}
   end
 
-  def handle_call({req, session}, from, %{refs: refs, cache: cache} = state) do
-    if MapSet.member?(cache, req) do
-      {:reply, :noop, state}
-    else
-      task = DistributedTask.async_nolink(fn ->
-        {from, PrivateAPI.request(req, session)}
-      end)
+  def handle_call({req, session}, from, %{refs: refs} = state) do
+    task = DistributedTask.async_nolink(fn ->
+      {from, PrivateAPI.request(req, session)}
+    end)
 
-      Logger.info("[#{inspect self()}] request: #{inspect req}")
-      Logger.debug("[#{inspect self()}] session: #{inspect session}")
+    Logger.info("[#{inspect self()}] request: #{inspect req}")
+    Logger.debug("[#{inspect self()}] session: #{inspect session}")
 
-      updated_cache = MapSet.put(cache, req)
+    updated_refs = Map.put(refs, task.ref, from)
 
-      updated_refs = Map.put(refs, task.ref, from)
-
-      {:noreply, %{refs: updated_refs, cache: updated_cache}}
-    end
+    {:noreply, %{refs: updated_refs}}
   end
 
   def handle_info({_, {from, response}}, state) when is_tuple(from) do

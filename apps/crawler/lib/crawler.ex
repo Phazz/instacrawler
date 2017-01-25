@@ -21,10 +21,9 @@ defmodule InstaCrawler.Crawler do
     case resp do
       {:ok, content} ->
         result = {:content, {req, content}}
-        available = Map.get(content, :more_available, true)
+        max_id = Map.get(content, :next_max_id)
 
-        if available do
-          max_id = Map.get(content, :next_max_id, "")
+        if max_id do
           next_req = %{req | params: Map.put(req.params, :max_id, max_id)}
           [result | request(next_req, session)]
         else
