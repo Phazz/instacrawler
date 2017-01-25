@@ -5,7 +5,7 @@ defmodule InstaCrawler.Parser do
   @user_id_length 10
 
   @possible_keys [:user_id, :pk, :id, :username, :media_id, :external_id,
-                  :facebook_places_id, :location, :profile_pic_id]
+                  :facebook_places_id, :profile_pic_id]
 
   def start_link(opts \\ []) do
     GenStage.start_link(__MODULE__, opts)
@@ -19,9 +19,10 @@ defmodule InstaCrawler.Parser do
 
   def handle_events(events, _from, state) do
     new_events = events
-    |> Flow.from_enumerable
+    |> Flow.from_enumerable()
+    |> Flow.partition()
     |> Flow.flat_map(&handle_event(&1, state))
-    |> Enum.reverse
+    |> Enum.reverse()
     {:noreply, new_events, state}
   end
 
@@ -83,16 +84,6 @@ defmodule InstaCrawler.Parser do
   defp to_requests(_req, {key, value}, params) when key in [:external_id, :facebook_places_id] do
       [
         %Request{entity: :location, id: value, resource: :feed, params: params}
-      ]
-  end
-  defp to_requests(_req, {:location, value}, _params) do
-      [
-        %Request{
-          entity: :location,
-          id: value[:address],
-          resource: :search,
-          params: %{longitude: value[:lat], latitude: value[:lng]}
-        }
       ]
   end
   defp to_requests(_req, {:username, value}, _params) do

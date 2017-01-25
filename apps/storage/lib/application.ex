@@ -12,7 +12,7 @@ defmodule InstaCrawler.Storage.Application do
         username: Confex.get(:storage, :username),
         password: Confex.get(:storage, :password),
         database: Confex.get(:storage, :database)
-      ]]),
+      ]], restart: :permanent),
       worker(InstaCrawler.Storage, [:mongo], restart: :permanent)
     ]
 

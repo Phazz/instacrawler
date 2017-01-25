@@ -1,8 +1,8 @@
 defmodule InstaCrawler.Crawler do
   use GenStage
-  alias InstaCrawler.{Gateway, PrivateAPI.Request, Extractor}
+  alias InstaCrawler.{Gateway, PrivateAPI.Request}
 
-  @max_id_keys [:next_max_id, :max_id]
+  @max_retries 2
 
   def start_link(session, opts) do
     GenStage.start_link(__MODULE__, [session, opts])
@@ -15,46 +15,46 @@ defmodule InstaCrawler.Crawler do
     dispatcher: GenStage.BroadcastDispatcher}
   end
 
-  def loop_pages(req, session, content) do
-    available = Map.get(content, :more_available, true)
+  def request(req, session, retries \\ 0)  do
+    resp = Gateway.request(req, session)
 
-    if available do
-      max_id = Map.get(content, :next_max_id, "")
-      next_req = %{req | params: Map.put(req.params, :max_id, max_id)}
-      resp = Gateway.request(next_req, session)
+    case resp do
+      {:ok, content} ->
+        result = {:content, {req, content}}
+        available = Map.get(content, :more_available, true)
 
-      case resp do
-        {:ok, content} -> [{:content, {req, content}} | loop_pages(req, session, content)]
-        _ -> []
-      end
-    else
-      []
+        if available do
+          max_id = Map.get(content, :next_max_id, "")
+          next_req = %{req | params: Map.put(req.params, :max_id, max_id)}
+          [result | request(next_req, session)]
+        else
+          [result]
+        end
+      {:err, _} ->
+        if retries < @max_retries do
+          request(req, session, retries + 1)
+        else
+          []
+        end
+      _ -> []
     end
   end
 
   def handle_events(events, _from, %{session: session, counter: counter} = state) do
     new_events = events
-    |> Enum.flat_map(fn rel ->
-      {_, req} = rel
+    |> Stream.map(&elem(&1, 1))
+    |> Flow.from_enumerable()
+    |> Flow.partition()
+    |> Flow.flat_map(&request(&1, session))
+    |> Enum.reverse()
 
-      resp = Gateway.request(req, session)
-
-      case resp do
-        {:ok, content} ->
-          pages = loop_pages(req, session,  content)
-
-          [{:relation, rel}, {:content, {req, content}}] ++ pages
-        {:err, error} ->
-          [{:error, {req, error}}]
-        :noop -> []
-      end
-    end)
+    counter = counter - 1
 
     if counter == 0 do
       GenStage.sync_notify(self(), :poison)
       {:stop, :normal, %{}}
     else
-      {:noreply, new_events, %{state | counter: counter - 1}}
+      {:noreply, new_events, %{state | counter: counter}}
     end
   end
 
