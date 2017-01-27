@@ -17,7 +17,7 @@ defmodule Storage.Mixfile do
   defp deps do
     [
       {:mongodb, github: "ericmj/mongodb"},
-      {:gen_stage, "~> 0.11.0"}
+      {:gen_stage, "~> 0.11"}
     ]
   end
 

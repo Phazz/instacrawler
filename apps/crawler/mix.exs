@@ -17,6 +17,7 @@ defmodule InstaCrawler.Crawler.Mixfile do
   defp deps do
     [
       {:private_api, in_umbrella: true},
+      {:storage, in_umbrella: true},
       {:libcluster, github: "bitwalker/libcluster"},
       {:swarm, github: "bitwalker/swarm"},
       {:uuid, "~> 1.1" },
